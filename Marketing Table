@@ -1,69 +1,77 @@
+-- Define a Common Table Expression (CTE) named Zoho to calculate lead counts and conversion counts
 WITH Zoho AS (
+    -- Sub-query to calculate the number of leads per day and lead source
     WITH Lead_Count AS (
         SELECT
-            Created_Date,
-            Lead_Source,
-            COUNT(Lead_Name) AS Lead_Count
+            Created_Date,         -- Date the lead was created
+            Lead_Source,          -- Source of the lead (e.g., Facebook, Google)
+            COUNT(Lead_Name) AS Lead_Count  -- Count the number of leads
         FROM `marketing-431313.Marketing.Leads`
-        WHERE EXTRACT(YEAR FROM Created_Date) = 2024
-        GROUP BY Created_Date, Lead_Source
+        WHERE EXTRACT(YEAR FROM Created_Date) = 2024  -- Filter leads created in 2024
+        GROUP BY Created_Date, Lead_Source  -- Group by date and lead source
     ),
+    -- Sub-query to calculate the number of converted leads (those with specific statuses) per day and lead source
     Convert_Count AS (
         SELECT
-            Created_Date,
-            Lead_Source,
-            COUNT(Lead_Name) AS Convert_Count
+            Created_Date,         -- Date the lead was created
+            Lead_Source,          -- Source of the lead
+            COUNT(Lead_Name) AS Convert_Count  -- Count the number of converted leads
         FROM `marketing-431313.Marketing.Leads`
-        WHERE Lead_Status IN ('Paid','Paid!','Ongoing payer!')
-        AND EXTRACT(YEAR FROM Created_Date) = 2024
-        GROUP BY Created_Date, Lead_Source
+        WHERE Lead_Status IN ('Paid', 'Paid!', 'Ongoing payer!')  -- Filter for specific lead statuses
+        AND EXTRACT(YEAR FROM Created_Date) = 2024  -- Filter leads created in 2024
+        GROUP BY Created_Date, Lead_Source  -- Group by date and lead source
     )
+    -- Join the lead count and convert count sub-queries
     SELECT
-        COALESCE(t1.Created_Date, t2.Created_Date) AS Created_Date,
-        COALESCE(t1.Lead_Source, t2.Lead_Source) AS Lead_Source,
-        t1.Lead_Count,
-        t2.Convert_Count
+        COALESCE(t1.Created_Date, t2.Created_Date) AS Created_Date,  -- Use date from either table
+        COALESCE(t1.Lead_Source, t2.Lead_Source) AS Lead_Source,     -- Use lead source from either table
+        t1.Lead_Count,                                               -- Lead count from the first sub-query
+        t2.Convert_Count                                             -- Convert count from the second sub-query
     FROM Lead_Count t1
     FULL OUTER JOIN Convert_Count t2
-    ON t1.Created_Date = t2.Created_Date AND t1.Lead_Source = t2.Lead_Source
+    ON t1.Created_Date = t2.Created_Date AND t1.Lead_Source = t2.Lead_Source  -- Join on date and lead source
 ),
+-- Define a CTE named Marketing_Metrics to calculate marketing metrics (impressions, clicks, cost)
 Marketing_Metrics AS (
     SELECT
-        Date,
-        Lead_Source,
-        SUM(Impressions) AS Impressions,
-        SUM(Clicks) AS Clicks,
-        SUM(Cost) AS Cost
+        Date,                   -- Date of the marketing metrics
+        Lead_Source,            -- Source of the leads (e.g., Facebook, Google)
+        SUM(Impressions) AS Impressions,  -- Total number of impressions
+        SUM(Clicks) AS Clicks,            -- Total number of clicks
+        SUM(Cost) AS Cost                 -- Total cost
     FROM (
+        -- Sub-query to aggregate Facebook marketing metrics
         SELECT
-            Day AS Date,
-            Lead_Source,
-            SUM(Impressions) AS Impressions,
-            SUM(Link_clicks) AS Clicks,
-            SUM(Amount_spent_GBP) AS Cost
+            Day AS Date,                -- Date of the metrics
+            Lead_Source,                -- Source of the leads
+            SUM(Impressions) AS Impressions,  -- Total impressions from Facebook
+            SUM(Link_clicks) AS Clicks,       -- Total clicks from Facebook
+            SUM(Amount_spent_GBP) AS Cost     -- Total cost from Facebook
         FROM `marketing-431313.Marketing.Facebook`
-        GROUP BY Day, Lead_Source
+        GROUP BY Day, Lead_Source  -- Group by date and lead source
         UNION ALL
+        -- Sub-query to aggregate Google marketing metrics
         SELECT
-            Day AS Date,
-            Lead_Source,
-            SUM(Impr) AS Impressions,
-            SUM(Clicks) AS Clicks,
-            SUM(Cost) AS Cost
+            Day AS Date,                -- Date of the metrics
+            Lead_Source,                -- Source of the leads
+            SUM(Impr) AS Impressions,   -- Total impressions from Google
+            SUM(Clicks) AS Clicks,      -- Total clicks from Google
+            SUM(Cost) AS Cost           -- Total cost from Google
         FROM `marketing-431313.Marketing.Google`
-        GROUP BY Day, Lead_Source
+        GROUP BY Day, Lead_Source  -- Group by date and lead source
     ) AS Combined_Metrics
-    GROUP BY Date, Lead_Source
+    GROUP BY Date, Lead_Source  -- Group by date and lead source
 )
+-- Final query to join Zoho and Marketing_Metrics CTEs
 SELECT 
-    COALESCE(t1.Created_Date, t2.Date) AS Date,
-    COALESCE(t1.Lead_Source, t2.Lead_Source) AS Lead_Source,
-    Lead_Count,
-    Convert_Count,
-    Impressions,
-    Clicks,
-    Cost
+    COALESCE(t1.Created_Date, t2.Date) AS Date,   -- Use date from either CTE
+    COALESCE(t1.Lead_Source, t2.Lead_Source) AS Lead_Source,  -- Use lead source from either CTE
+    Lead_Count,           -- Lead count from Zoho CTE
+    Convert_Count,        -- Convert count from Zoho CTE
+    Impressions,          -- Impressions from Marketing_Metrics CTE
+    Clicks,               -- Clicks from Marketing_Metrics CTE
+    Cost                  -- Cost from Marketing_Metrics CTE
 FROM Zoho t1
 FULL OUTER JOIN Marketing_Metrics t2 
-ON t1.Created_Date = t2.Date AND t1.Lead_Source = t2.Lead_Source
-ORDER BY Date;
+ON t1.Created_Date = t2.Date AND t1.Lead_Source = t2.Lead_Source  -- Join on date and lead source
+ORDER BY Date;  -- Order the results by date

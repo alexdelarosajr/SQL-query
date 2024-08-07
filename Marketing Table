@@ -1,0 +1,69 @@
+WITH Zoho AS (
+    WITH Lead_Count AS (
+        SELECT
+            Created_Date,
+            Lead_Source,
+            COUNT(Lead_Name) AS Lead_Count
+        FROM `marketing-431313.Marketing.Leads`
+        WHERE EXTRACT(YEAR FROM Created_Date) = 2024
+        GROUP BY Created_Date, Lead_Source
+    ),
+    Convert_Count AS (
+        SELECT
+            Created_Date,
+            Lead_Source,
+            COUNT(Lead_Name) AS Convert_Count
+        FROM `marketing-431313.Marketing.Leads`
+        WHERE Lead_Status IN ('Paid','Paid!','Ongoing payer!')
+        AND EXTRACT(YEAR FROM Created_Date) = 2024
+        GROUP BY Created_Date, Lead_Source
+    )
+    SELECT
+        COALESCE(t1.Created_Date, t2.Created_Date) AS Created_Date,
+        COALESCE(t1.Lead_Source, t2.Lead_Source) AS Lead_Source,
+        t1.Lead_Count,
+        t2.Convert_Count
+    FROM Lead_Count t1
+    FULL OUTER JOIN Convert_Count t2
+    ON t1.Created_Date = t2.Created_Date AND t1.Lead_Source = t2.Lead_Source
+),
+Marketing_Metrics AS (
+    SELECT
+        Date,
+        Lead_Source,
+        SUM(Impressions) AS Impressions,
+        SUM(Clicks) AS Clicks,
+        SUM(Cost) AS Cost
+    FROM (
+        SELECT
+            Day AS Date,
+            Lead_Source,
+            SUM(Impressions) AS Impressions,
+            SUM(Link_clicks) AS Clicks,
+            SUM(Amount_spent_GBP) AS Cost
+        FROM `marketing-431313.Marketing.Facebook`
+        GROUP BY Day, Lead_Source
+        UNION ALL
+        SELECT
+            Day AS Date,
+            Lead_Source,
+            SUM(Impr) AS Impressions,
+            SUM(Clicks) AS Clicks,
+            SUM(Cost) AS Cost
+        FROM `marketing-431313.Marketing.Google`
+        GROUP BY Day, Lead_Source
+    ) AS Combined_Metrics
+    GROUP BY Date, Lead_Source
+)
+SELECT 
+    COALESCE(t1.Created_Date, t2.Date) AS Date,
+    COALESCE(t1.Lead_Source, t2.Lead_Source) AS Lead_Source,
+    Lead_Count,
+    Convert_Count,
+    Impressions,
+    Clicks,
+    Cost
+FROM Zoho t1
+FULL OUTER JOIN Marketing_Metrics t2 
+ON t1.Created_Date = t2.Date AND t1.Lead_Source = t2.Lead_Source
+ORDER BY Date;
